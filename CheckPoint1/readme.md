@@ -23,14 +23,16 @@ CheckPoint1 consists of two tasks
 
 ### File structure
 
+```bash
 catkin_ws/src/
-
 ├── publisher_node.cpp
 ├── subscriber_node.cpp
 ├── launch/
 │   └── checkpoint1.launch
 
 arduino_ws/
-
-├── HelloWorld/HelloWorld.ino
-└── Task2/Task2.ino
+├── HelloWorld/
+│   └── HelloWorld.ino
+└── Task2/
+    └── Task2.ino
+```
