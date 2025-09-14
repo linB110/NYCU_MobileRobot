@@ -22,6 +22,7 @@ CheckPoint1 consists of two tasks
    b. Task2.ino (scbscribe user's input and multiply it by 2 then publish it to Raspberry Pi)
 
 ### File structure
+
 catkin_ws/src/
 ├── publisher_node.cpp
 ├── subscriber_node.cpp
