@@ -1,5 +1,5 @@
 CheckPoint1 consists of two tasks
-1. Ubuntu 18.04 setup on Raspberry Pi, ROS installation, SSH remote connection setting
+1. Ubuntu 18.04 setup on Raspberry Pi, ROS melodic installation, SSH remote connection setting
 2. Raspberry Pi communication with Arduino uno via ROS
 
 ### Task1
@@ -20,3 +20,14 @@ CheckPoint1 consists of two tasks
 5. arduino workspace should comprise of following files
    a. HelloWorld.ino (use for testing arduino connection with Raspberry Pi)
    b. Task2.ino (scbscribe user's input and multiply it by 2 then publish it to Raspberry Pi)
+
+### File structure
+catkin_ws/src/
+├── publisher_node.cpp
+├── subscriber_node.cpp
+├── launch/
+│   └── checkpoint1.launch
+
+arduino_ws/
+├── HelloWorld/HelloWorld.ino
+└── Task2/Task2.ino
