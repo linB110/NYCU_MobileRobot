@@ -1,0 +1,4 @@
+<launch>
+  <node name="publisher_node" pkg="ros_task2" type="publisher_node" output="screen"/>
+  <node name ="subscriber_node" pkg="ros_task2" type="subscriber_node" output="screen"/>
+</launch>
