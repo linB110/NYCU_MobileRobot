@@ -121,6 +121,9 @@ void motor_acuation(const ros_motion::pwmValue& inputValue)
 {    
   desiredRPM_L = inputValue.leftPWMValue;
   desiredRPM_R = inputValue.rightPWMValue;
+  
+  motor_control(desiredRPM_L, IN1, IN2, ENA);
+  motor_control(desiredRPM_R, IN3, IN4, ENB);
 }
 
 float PID_control(float desired_value, float measurement)
@@ -214,4 +217,6 @@ void loop()
   char buf2[48];
   snprintf(buf2, sizeof(buf2), "Right RPM: %s", ebuf);
   node.loginfo(buf2);
+  
+  delay(200);
 }
