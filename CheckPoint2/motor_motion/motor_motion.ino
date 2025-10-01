@@ -89,7 +89,7 @@ float read_RPM_left(float cpr) {
   static uint32_t lastT = 0;
   static int32_t  lastP = 0;
   uint32_t now = ticks;
-  if (now - lastT >= 500) {
+  if (now - lastT >= 200) {
     noInterrupts();
     int32_t currentP = pulses_left;
     interrupts();
@@ -105,7 +105,7 @@ float read_RPM_right(float cpr) {
   static uint32_t lastT = 0;
   static int32_t  lastP = 0;
   uint32_t now = ticks;
-  if (now - lastT >= 500) {
+  if (now - lastT >= 200) {
     noInterrupts();
     int32_t currentP = pulses_right;
     interrupts();
@@ -122,8 +122,8 @@ void motor_acuation(const ros_motion::pwmValue& inputValue)
   desiredRPM_L = inputValue.leftPWMValue;
   desiredRPM_R = inputValue.rightPWMValue;
   
-  motor_control(desiredRPM_L, IN1, IN2, ENA);
-  motor_control(desiredRPM_R, IN3, IN4, ENB);
+  //motor_control(desiredRPM_L, IN1, IN2, ENA);
+  //motor_control(desiredRPM_R, IN3, IN4, ENB);
 }
 
 float PID_control(float desired_value, float measurement)
@@ -131,9 +131,8 @@ float PID_control(float desired_value, float measurement)
   float output = 0.0;
   static float preError = 0.0;
   
-  
   float dt = ROS_SPIN_TIME / 1000.0f;   // ros spin every 10ms
-  float kp = 10, ki = 3, kd = 0.5;  // PID parameters
+  float kp = 1.2, ki = 0, kd = 0;  // PID parameters
   
   float error = desired_value - measurement;
   float threshold = 1.0;   // error within 1 RPM
@@ -144,42 +143,14 @@ float PID_control(float desired_value, float measurement)
   float derivative = 0.0;
   
   integral = error * dt;
+  const float iMax = 255.0f / max(ki, 0.001f);
+  integral = constrain(integral, -iMax, iMax);
+  
   derivative = (error - preError) / dt;
   preError = error;
   
   return kp * error + ki * integral + kd * derivative;
 }
-
-//
-//float PID_control(float right_input, float left_input, float right_output, float left_output)
-//{
-//  float output = 0.0;
-//  float small_disturbance = 1e-6;
-//  
-//  right_input = max(right_input, small_disturbance);
-//  left_input = max(left_input, small_disturbance);
-//  right_output = max(right_output, small_disturbance);
-//  left_output = max(left_output, small_disturbance);
-//
-//  float dt = ROS_SPIN_TIME / 1000.0f;   // ros spin every 10ms
-//  float kp = 10, ki = 3, kd = 0.5;  // PID parameters
-// 
-//  static int pre_error = 0;
-//  int error = (right_input / left_input) - (right_output / left_output);  // PWM => RPM is not constant
-//  
-//  const float threshold = 0.15;
-//  if (abs(error) < threshold) return 0.0;
-//  
-//  static float integral = 0.0;
-//  integral += error * dt;
-//  
-//  static float derivative = 0.0;
-//  derivative = (error - pre_error) / dt;    
-//  
-//  output = kp * error + ki * integral + kd * derivative;
-//  
-//  return output;
-//}
 
 void setup()
 {
@@ -206,17 +177,29 @@ void loop()
   node.spinOnce();
   delay(ROS_SPIN_TIME);
   
-  char fbuf[16];
-  dtostrf(leftWheelRPM, 0, 2, fbuf);
-  char buf[48];
-  snprintf(buf, sizeof(buf), "Left RPM: %s", fbuf);
-  node.loginfo(buf);
+  // PID control
+  float mR = read_RPM_right(CPR);
+  float mL = read_RPM_left(CPR);
+  float measure_R = 0.0;
+  float measure_L = 0.0;
+  if (mL >= 0.0f) measure_L = mL;
+  if (mR >= 0.0f) measure_R = mR;
   
-  char ebuf[16];
-  dtostrf(rightWheelRPM, 0, 2, ebuf);
-  char buf2[48];
-  snprintf(buf2, sizeof(buf2), "Right RPM: %s", ebuf);
-  node.loginfo(buf2);
+  char buf[48];
+  dtostrf(measure_L, 0, 2, buf);
+  node.loginfo((String("Left RPM: ") + String(buf)).c_str());
+  dtostrf(measure_R, 0, 2, buf);
+  node.loginfo((String("Right RPM: ") + String(buf)).c_str());
+  
+  if (mL >= 0.0f){
+    float delta_L = PID_control(desiredRPM_L, measure_L);
+    motor_control(desiredRPM_L + delta_L, IN1, IN2, ENA);
+  }
+  
+  if (mR >= 0.0f){
+    float delta_R = PID_control(desiredRPM_R, measure_R);
+    motor_control(desiredRPM_R + delta_R, IN3, IN4, ENB);
+  }
   
   delay(200);
 }
