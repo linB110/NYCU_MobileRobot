@@ -143,7 +143,7 @@ terminal 1 : roscore
 
 terminal 2 : rosrun rosserial_python serial_node.py _port:=/dev/ttyACM0 _baud:=57600
 
-terminal 3 : rosrun your_ros_pack your_roscpp_obj_file
+terminal 3 : rosrun your_ros_pack your_roscpp_executable_file
 
 ---
 
