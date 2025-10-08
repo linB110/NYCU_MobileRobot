@@ -1,2 +1,2 @@
-float32 left
-float32 
+float32 leftPWMValue
+float32 rightPWMValue
