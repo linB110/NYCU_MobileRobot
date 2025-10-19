@@ -3,6 +3,9 @@
 #include "motor_motion.h"
 #include "obstacle_avoidance.h"
 
+#define MOTOR_STEP 10
+#define MOTOR_INCREMENT 5
+
 // ---------- Sensor pins ----------
 const int light_sensor = A0;
 
@@ -14,7 +17,7 @@ const int light_threshold = 150;
 // find lighting obj flag
 volatile bool obj_found = false;
 
-int tuning_ambient_light()
+int read_ambient_light()
 {
   // light sensor : dark = 1,  bright = 0
   int val = analogRead(light_sensor);
@@ -63,16 +66,28 @@ void loop()
   
 
   noInterrupts();
+
   bool right_touched = right_hit;
   bool left_touched = left_hit;
   bool target_touched = end_hit;
   right_hit = left_hit = end_hit = false;
+
+  bool found = find_lighting_obj(read_ambient_light());
+
   interrupts();
-  Serial.println(right_touched);
+  //Serial.println(right_touched);
   
   if (obj_found){
+    for (int i = 0; i < MOTOR_STEP; i += MOTOR_INCREMENT){
+      rotate();
+      delay(500);
+      
+      if ( find_lighting_obj(read_ambient_light()) )
+        break;
+    }
+
     move_forward();
-    Serial.println("obj found !!!");
+    delay(2000);
   }  
   else{
     if (right_touched){
@@ -92,7 +107,6 @@ void loop()
     }
   }
   
-  // bool found = find_lighting_obj(tuning_ambient_light());
   // Serial.println(found);
 
   // if (found)
