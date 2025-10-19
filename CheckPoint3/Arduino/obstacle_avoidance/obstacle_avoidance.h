@@ -13,9 +13,6 @@ extern volatile bool right_hit;
 extern volatile bool left_hit;
 extern volatile bool end_hit;
 
-// serach obj flag
-extern volatile bool close_to_obj;
-
 // initialization
 void sensor_init();
 
@@ -23,4 +20,3 @@ void sensor_init();
 void touched_right();
 void touched_left();
 void touched_target();
-
