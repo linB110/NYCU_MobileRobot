@@ -150,9 +150,14 @@ void turn_left(int inner_pwm, int outer_pwm)
   motor_control(inner_pwm, IN3, IN4, ENB);   
 }
 
+void rotate(int inner_pwm, int outer_pwm)
+{
+  motor_control(outer_pwm, IN1, IN2, ENA);   
+  motor_control(inner_pwm, IN3, IN4, ENB);
+}
+
 void stop_motors()
 {
   motor_control(0, IN1, IN2, ENA);
   motor_control(0, IN3, IN4, ENB);
 }
-
