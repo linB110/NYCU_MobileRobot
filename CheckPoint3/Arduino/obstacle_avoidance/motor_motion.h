@@ -34,9 +34,9 @@ float read_right_rpm();
 // motor control
 void motor_control(int pwm, int inA, int inB, int enable);
 
-void move_forward(int pwm = 90);
-void move_backward(int pwm = 90);
-void turn_left(int inner_pwm = 90, int outer_pwm = 110);
-void turn_right(int inner_pwm = 90, int outer_pwm = 110);
-void rotate(int inner_pwm = -80, int outer_pwm = 95);
+void move_forward(int pwm = 100);
+void move_backward(int pwm = 100);
+void turn_left(int inner_pwm = 100, int outer_pwm = 120);
+void turn_right(int inner_pwm = 100, int outer_pwm = 120);
+void rotate(int inner_pwm = -95, int outer_pwm = 110);
 void stop_motors();
