@@ -14,8 +14,9 @@ const int light_sensor = A0;
 int ambient_light = 800;
 const int light_threshold = 20;
 
-// find lighting obj flag
+// find lighting obj 
 volatile bool obj_found = false;
+volatile int min_lightness_value = 1023;
 
 // stop motion
 volatile bool all_motion_stop = false;
@@ -88,22 +89,33 @@ void loop()
   right_hit = left_hit = end_hit = false;
 
   bool obj_found = find_lighting_obj(read_ambient_light());
-
+  
   interrupts();
-
+  
+  int read_value = read_ambient_light();
+  bool become_darker = true;
+  if (read_value < min_lightness_value){
+    min_lightness_value = read_value;
+    become_darker = false;
+  }
+  
   // motion flow
   if (!all_motion_stop){
     if (obj_found){
-      bool direction_is_left = find_obj_direction();
-      if (direction_is_left) {
-        rotate_ccw();
-      }else {
-        rotate_cw();
+      if (become_darker){
+        bool direction_is_left = find_obj_direction();
+        if (direction_is_left) {
+          rotate_ccw();
+        }else {
+          rotate_cw();
+        }
+        delay(100);
+        move_forward();
+        delay(1000);
+      }else{
+        move_forward();
+        delay(1000);
       }
-      delay(100);
-      move_forward();
-      delay(1000);
-
     }else{
       if (right_touched){
         move_backward();
