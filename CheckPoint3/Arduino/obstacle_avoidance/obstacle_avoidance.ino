@@ -3,7 +3,7 @@
 #include "motor_motion.h"
 #include "obstacle_avoidance.h"
 
-#define MOTOR_STEP 10
+#define MOTOR_STEP 30
 #define MOTOR_INCREMENT 5
 
 // ---------- Sensor pins ----------
@@ -11,20 +11,22 @@ const int light_sensor = A0;
 
 // lighting threshold
 // use tuning_ambient_light function to modify value for usage
-const int ambient_light = 540;
-const int light_threshold = 150;
+int ambient_light = 800;
+const int light_threshold = 20;
 
 // find lighting obj flag
 volatile bool obj_found = false;
 
-int read_ambient_light()
-{
-  // light sensor : dark = 1,  bright = 0
-  int val = analogRead(light_sensor);
-  Serial.print("val = ");
-  Serial.println(val);
+// stop motion
+volatile bool all_motion_stop = false;
 
-  return val;
+int read_ambient_light(int samples = 5)
+{
+  int v = 0;
+  for (int i = 0 ; i < samples; i++)
+    v += analogRead(light_sensor);
+  
+  return v / samples;
 }
 
 bool find_lighting_obj(int detected_light_value)
@@ -33,6 +35,28 @@ bool find_lighting_obj(int detected_light_value)
     return true;
   
   return false; 
+}
+
+bool find_obj_direction()
+{
+  // rotate left and read
+  rotate_ccw();
+  delay(1000);
+  stop_motors();
+  delay(200);
+  int left_reading = read_ambient_light(10);
+
+  // rotate right and read
+  rotate_cw();
+  delay(2000);
+  stop_motors();
+  delay(200);
+  int right_reading = read_ambient_light(10);
+
+  rotate_ccw();
+  delay(1000);
+
+  return left_reading < right_reading ? true : false;
 }
 
 void setup() 
@@ -44,27 +68,18 @@ void setup()
 
   // snesor
   pinMode(light_sensor, INPUT);
-  sensor_init();           
+  sensor_init();      
+
+  // ambient light calibration   
+  //ambient_light = read_ambient_light(15);  
 }
 
 void loop() 
 {
-  //int val = digitalRead(light_sensor);
-  //Serial.print("val = ");
+  // int val = read_ambient_light();
+  // Serial.println(val);
 
-  // touch sensor : opened = 1 touched = 0
-  //Serial.println(val);
-
-  //move_forward();
-  // turn_right();
-  // delay(10000);
-  // stop_motors();
-  // delay(5000);
-  // turn_left();
-  // delay(10000);
-  // stop_motors();
-  
-
+  //obstacle avoidance reading
   noInterrupts();
 
   bool right_touched = right_hit;
@@ -72,47 +87,44 @@ void loop()
   bool target_touched = end_hit;
   right_hit = left_hit = end_hit = false;
 
-  bool found = find_lighting_obj(read_ambient_light());
+  bool obj_found = find_lighting_obj(read_ambient_light());
 
   interrupts();
-  //Serial.println(right_touched);
-  
-  if (obj_found){
-    for (int i = 0; i < MOTOR_STEP; i += MOTOR_INCREMENT){
-      rotate();
-      delay(500);
-      
-      if ( find_lighting_obj(read_ambient_light()) )
-        break;
-    }
 
-    move_forward();
-    delay(2000);
-  }  
-  else{
-    if (right_touched){
-      move_backward();
-      delay(2000);
-      turn_left();
-      delay(1000);
-    }else if (left_touched){
-      move_backward();
-      delay(2000);
-      turn_right();
-      delay(1000);
-    }else if (target_touched){
-      stop_motors();
-    }else{
+  // motion flow
+  if (!all_motion_stop){
+    if (obj_found){
+      bool direction_is_left = find_obj_direction();
+      if (direction_is_left) {
+        rotate_ccw();
+      }else {
+        rotate_cw();
+      }
+      delay(100);
       move_forward();
+      delay(1000);
+
+    }else{
+      if (right_touched){
+        move_backward();
+        delay(2000);
+        turn_left();
+        delay(1000);
+      }else if (left_touched){
+        move_backward();
+        delay(2000);
+        turn_right();
+        delay(1000);
+      }else if (target_touched){
+        all_motion_stop = true;
+        stop_motors();
+      }else{
+        move_forward();
+      }
     }
-  }
+  }else{
+      stop_motors();
+    }
   
-  // Serial.println(found);
-
-  // if (found)
-  //   Serial.println("found");
-
-  // delay(1000);
-  //rotate();
   delay(1000);
 }
