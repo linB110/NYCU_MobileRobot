@@ -1,5 +1,8 @@
 Develop procedure
 
+### flow diagram
+![ROS Flow](./flow_diagram.png)
+
 ### Unit tests
 1. direct motor control using arduino
 2. light sensor and touch sensor interfacing
