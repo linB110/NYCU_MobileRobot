@@ -3,7 +3,9 @@
 #include "motor_motion.h"
 #include "obstacle_avoidance.h"
 
-//const int IR_sensor = 12;
+// ---------- Sensor pins ----------
+const int light_sensor = A0;
+const int IR_sensor = 12;
 
 void setup() 
 {
@@ -32,17 +34,20 @@ void loop()
 
   // ======= test ========
   //move_forward();
-  int lp = read_left_pulse();
+  //int lp = read_left_pulse();
   // Serial.print("left pulse = ");
   // Serial.println(lp);
 
-  int rp = read_right_pulse();
+  //int rp = read_right_pulse();
   // Serial.print("right pulse = ");
   // Serial.println(rp);
   
   //motor_control(80, IN1, IN2, ENA);
   //move_forward_cl();
   //move_backward_cl();
+
+
+
 
   delay(50);
   // ======================
