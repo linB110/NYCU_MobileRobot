@@ -50,3 +50,5 @@ void stop_motors();
 // motor control (closed loop)
 void move_forward_cl();
 void move_backward_cl();
+void turn_right_cl();
+void turn_left_cl();
