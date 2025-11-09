@@ -204,8 +204,8 @@ void stop_motors()
 // ==================================================
 void move_forward_cl()
 {
-  int r_pulse = read_right_pulse();
-  int l_pulse = read_left_pulse();
+  long r_pulse = read_right_pulse();
+  long l_pulse = read_left_pulse();
   
   const int diff = r_pulse - l_pulse;
   int error = diff;
@@ -229,8 +229,8 @@ void move_forward_cl()
 
 void move_backward_cl()
 {
-  int r_pulse = read_right_pulse();
-  int l_pulse = read_left_pulse();
+  long r_pulse = read_right_pulse();
+  long l_pulse = read_left_pulse();
 
   const int diff = r_pulse - l_pulse;  
   int error = diff;                     
@@ -249,4 +249,56 @@ void move_backward_cl()
 
   motor_control(-pwm_right_mag, IN1, IN2, ENA);
   motor_control(-pwm_left_mag,  IN3, IN4, ENB);
+}
+
+void turn_right_cl()
+{
+  long r_pulse = read_right_pulse();
+  long l_pulse = read_left_pulse();
+
+  long diff   = r_pulse - l_pulse;           
+  long target = -ticks_turning_diff;          
+  long error  = diff - target;
+  if (abs(error) <= ticks_tolerance) error = 0;
+
+  const int max_comp = 60;
+  const int min_pwm  = 80;
+
+  int comp = (int)(Kp * error);
+  comp = constrain(comp, -max_comp, max_comp);
+
+  int pwm_left  = min_pwm + comp;  
+  int pwm_right = min_pwm - comp;
+
+  pwm_left  = max(pwm_left,  min_pwm);
+  pwm_right = max(pwm_right, min_pwm);
+
+  motor_control(pwm_right, IN1, IN2, ENA);
+  motor_control(pwm_left,  IN3, IN4, ENB);
+}
+
+void turn_left_cl()
+{
+  long r_pulse = read_right_pulse();
+  long l_pulse = read_left_pulse();
+
+  long diff   = r_pulse - l_pulse;           
+  long target = +ticks_turning_diff;          
+  long error  = diff - target;
+  if (abs(error) <= ticks_tolerance) error = 0;
+
+  const int max_comp = 60;
+  const int min_pwm  = 80;
+
+  int comp = (int)(Kp * error);
+  comp = constrain(comp, -max_comp, max_comp);
+
+  int pwm_left  = min_pwm + comp;
+  int pwm_right = min_pwm - comp;
+
+  pwm_left  = max(pwm_left,  min_pwm);
+  pwm_right = max(pwm_right, min_pwm);
+
+  motor_control(pwm_right, IN1, IN2, ENA);
+  motor_control(pwm_left,  IN3, IN4, ENB);
 }
