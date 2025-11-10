@@ -187,35 +187,6 @@ void setup()
 
 void update_robot_state()
 {
-  noInterrupts();
-
-  bool right_touched = right_hit;
-  bool left_touched = left_hit;
-  bool target_touched = end_hit;
-
-  // reset flag
-  right_hit = left_hit = end_hit = false; 
-  interrupts();
-  
-  // obstacle avoidance has highest priority
-  if (right_touched){
-    robot__current_state = avoid_obstacle_right;
-    return;
-  } 
-  
-  if (left_touched){
-    robot__current_state = avoid_obstacle_left;
-    return;
-  } 
-
-  if (target_touched){
-    robot__current_state = get_puck;
-    has_puck = true;
-    return;
-  }else if (!target_touched){
-    has_puck = false;
-  }
-
   obj_found = find_lighting_obj(read_ambient_light());
   if (obj_found){
     robot__current_state = searching_puck;
@@ -224,8 +195,9 @@ void update_robot_state()
   
   if (has_puck){
     searched_beacon = detect_beacon();
-    if (searched_beacon != None && target_touched){
+    if (searched_beacon != None){
       robot__current_state = finding_goal;
+      stop_motors();
       return;
     }
   }
@@ -241,8 +213,36 @@ void loop()
   
   // ============================
 
-  // update Robot State
-  update_robot_state();
+
+  // obstacle avoidance has highest priority in all states
+  noInterrupts();
+
+  bool right_touched = right_hit;
+  bool left_touched = left_hit;
+  bool target_touched = end_hit;
+
+  // reset flags
+  right_hit = left_hit = end_hit = false; 
+  interrupts();
+  
+  if (right_touched)
+    robot__current_state = avoid_obstacle_right;
+  
+  if (left_touched)
+    robot__current_state = avoid_obstacle_left;
+
+  if (target_touched){
+    robot__current_state = get_puck;
+    has_puck = true;
+  }//else
+    //has_puck = false;
+
+  // update Robot State (if no obstacle to avoid)
+  if (robot__current_state != avoid_obstacle_right &&
+    robot__current_state != avoid_obstacle_left  &&
+    robot__current_state != get_puck) {
+    update_robot_state();
+  }
 
   // robot behave with different state
   switch (robot__current_state){
@@ -253,6 +253,7 @@ void loop()
       delay(500);
       move_forward_cl();
       delay(1000);
+      robot__current_state = moving;
       break;
 
     case(avoid_obstacle_left):
@@ -262,6 +263,7 @@ void loop()
       delay(500);
       move_forward_cl();
       delay(1000);
+      robot__current_state = moving;
       break;
 
     case(searching_puck):
@@ -285,5 +287,5 @@ void loop()
   Serial.print("robot state : ");
   Serial.println(robot__current_state);
 
-  delay(50);
+  delay(20);
 }
