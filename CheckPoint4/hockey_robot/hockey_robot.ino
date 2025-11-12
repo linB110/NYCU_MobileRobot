@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <stdint.h>
+#include <MsTimer2.h>
 #include "motor_motion.h"
 #include "obstacle_avoidance.h"
 
@@ -20,7 +21,10 @@ enum RobotState {
   finding_goal
 };
 
-RobotState robot__current_state = idle;
+RobotState robot_current_state = idle;
+
+// Use timer interrupt to activate motion close loop control
+const unsigned long Motion_control_period = 20;
 
 // ---------- lighting puck  ----------
 // lighting threshold
@@ -28,9 +32,10 @@ RobotState robot__current_state = idle;
 int ambient_light = 800;
 const int light_threshold = 20;
 
-// find lighting obj flag
+// find lighting obj (puck) 
 bool obj_found = false;
 bool has_puck = false;
+int detected_lughtness = 1024;  // darkest value in default
 
 // sample infrared 
 unsigned long start_time = 0;
@@ -47,9 +52,57 @@ enum BeaconType{
 };
 
 BeaconType searched_beacon = None;
-BeaconType target_beacon = B1500;
+BeaconType target_beacon = B600;
 
 // ---------- Functions ----------
+void motion_control_ISR()
+{
+  long r = read_right_pulse();
+  long l = read_left_pulse();
+  long diff = r - l;
+
+  int pwmR = 0, pwmL = 0;
+  const int max_comp = 60;     
+  const int min_pwm  = 80;     
+  const float Kp = 0.8f;
+  const int ticks_tolerance = 100;
+
+  long error = 0;
+  const int turn_target = 300;
+
+  auto apply_pid = [&](long error){
+    if (abs(error) <= ticks_tolerance) error = 0;           
+    int comp = (int)(Kp * error);
+    comp = constrain(comp, -max_comp, max_comp);
+    int base = min_pwm;
+    int left  = max(base + comp, base);
+    int right = max(base - comp, base);
+    pwmL = left; 
+    pwmR = right;
+
+    motor_control(pwmR, IN1, IN2, ENA);
+    motor_control(pwmL, IN3, IN4, ENB);
+  };
+
+  switch (robot_current_state){
+    case (moving):
+      error = diff;                
+      apply_pid(error);
+      break;
+    
+    case(avoid_obstacle_left):
+      error = diff - turn_target;  
+      if (abs(error) <= ticks_tolerance) { robot_current_state = moving; break; }
+      apply_pid(error);
+      break;
+
+    case(avoid_obstacle_right):
+      error = diff - turn_target;  
+      if (abs(error) <= ticks_tolerance) { robot_current_state = moving; break; }
+      apply_pid(error);
+      break;
+  }
+}
 int read_ambient_light(int samples = 5)
 {
   int v = 0;
@@ -133,6 +186,10 @@ BeaconType detect_beacon(int detect_times = 3)
       b1500_count++;
     }
 
+    // checking infomation 
+    // Serial.print("ratio = ");
+    // Serial.println(ratio);
+
     delay(10); 
   }
 
@@ -161,7 +218,7 @@ void search_goal()
       move_forward_cl();
       delay(1000);
 
-      robot__current_state = finding_goal;
+      robot_current_state = finding_goal;
       break;
     }  
   }
@@ -180,7 +237,11 @@ void setup()
   pinMode(light_sensor, INPUT);
   pinMode(IR_sensor, INPUT);
   sensor_init();      
-
+  
+  // compute motion parameter periodically
+  MsTimer2::set(Motion_control_period, motion_control_ISR);
+  MsTimer2::start();
+ 
   // ambient light calibration   
   ambient_light = read_ambient_light(15);  
 }
@@ -189,32 +250,25 @@ void update_robot_state()
 {
   obj_found = find_lighting_obj(read_ambient_light());
   if (obj_found){
-    robot__current_state = searching_puck;
+    robot_current_state = searching_puck;
     return;
   }
   
   if (has_puck){
     searched_beacon = detect_beacon();
     if (searched_beacon != None){
-      robot__current_state = finding_goal;
+      robot_current_state = finding_goal;
       stop_motors();
       return;
     }
   }
   
   // no sensor is triggered => keep exploring
-  robot__current_state = moving;  
+  robot_current_state = moving;  
 }
 
-// ---------- Main loop ----------
-void loop() 
+void main_procedure()
 {
-  // ======= test section =======
-  
-  // ============================
-
-
-  // obstacle avoidance has highest priority in all states
   noInterrupts();
 
   bool right_touched = right_hit;
@@ -223,48 +277,75 @@ void loop()
 
   // reset flags
   right_hit = left_hit = end_hit = false; 
+  
   interrupts();
   
   if (right_touched)
-    robot__current_state = avoid_obstacle_right;
+    robot_current_state = avoid_obstacle_right;
   
   if (left_touched)
-    robot__current_state = avoid_obstacle_left;
+    robot_current_state = avoid_obstacle_left;
 
   if (target_touched){
-    robot__current_state = get_puck;
+    robot_current_state = get_puck;
     has_puck = true;
   }//else
     //has_puck = false;
 
   // update Robot State (if no obstacle to avoid)
-  if (robot__current_state != avoid_obstacle_right &&
-    robot__current_state != avoid_obstacle_left  &&
-    robot__current_state != get_puck) {
+  if (robot_current_state != avoid_obstacle_right &&
+    robot_current_state != avoid_obstacle_left  &&
+    robot_current_state != get_puck) {
     update_robot_state();
   }
 
   // robot behave with different state
-  switch (robot__current_state){
+  switch (robot_current_state){
     case(avoid_obstacle_right):
-      move_backward_cl();
-      delay(2000);
-      turn_left_cl();
-      delay(500);
-      move_forward_cl();
-      delay(1000);
-      robot__current_state = moving;
-      break;
+      MsTimer2::stop();
 
-    case(avoid_obstacle_left):
-      move_backward_cl();
-      delay(2000);
-      turn_right_cl();
-      delay(500);
-      move_forward_cl();
-      delay(1000);
-      robot__current_state = moving;
-      break;
+    {
+      unsigned long t0 = millis();
+      while (millis() - t0 < 2000) {
+        move_backward_cl();
+        delay(20); 
+      }
+    }
+
+    {
+      unsigned long t1 = millis();
+      while (millis() - t1 < 500) {
+        turn_left_cl();
+        delay(20);
+      }
+    }
+
+    MsTimer2::start();
+    robot_current_state = moving;
+    break;
+
+      case(avoid_obstacle_left):
+        MsTimer2::stop();
+
+    {
+      unsigned long t0 = millis();
+      while (millis() - t0 < 2000) {
+        move_backward_cl();
+        delay(20);
+      }
+    }
+
+    {
+      unsigned long t1 = millis();
+      while (millis() - t1 < 500) {
+        turn_right_cl();
+        delay(20);
+      }
+    }
+
+    MsTimer2::start();
+    robot_current_state = moving;
+    break;
 
     case(searching_puck):
       search_puck();
@@ -283,9 +364,96 @@ void loop()
     default:
       break;
   }
-  
-  Serial.print("robot state : ");
-  Serial.println(robot__current_state);
+}
 
+// ---------- Main loop ----------
+void loop() 
+{
+  // ======= test section =======
+  //detect_beacon();
+
+  // int v = read_ambient_light();
+  // Serial.print("lightness = ");
+  // Serial.println(v);
+
+  // turn_right_cl();
+  // turn_left_cl();
+  // move_forward_cl();
+  // move_backward_cl();
+  // ============================
+   
+  // obstacle avoidance has highest priority in all states
+  noInterrupts();
+
+  bool right_touched = right_hit;
+  bool left_touched = left_hit;
+  bool target_touched = end_hit;
+
+  // reset flags
+  right_hit = left_hit = end_hit = false; 
+
+  interrupts();
+      
+  if (right_touched)
+    robot_current_state = avoid_obstacle_right;
+  
+  if (left_touched)
+    robot_current_state = avoid_obstacle_left;
+
+  if (target_touched){
+    robot_current_state = get_puck;
+    has_puck = true;
+  }//else
+  //   //has_puck = false;
+
+  main_procedure(); 
+
+  // // update Robot State (if no obstacle to avoid)
+  // if (robot_current_state != avoid_obstacle_right &&
+  //   robot_current_state != avoid_obstacle_left  &&
+  //   robot_current_state != get_puck) {
+  //   update_robot_state();
+  // }
+
+  // // robot behave with different state
+  // switch (robot_current_state){
+  //   case(avoid_obstacle_right):
+  //     move_backward_cl();
+  //     delay(2000);
+  //     turn_left_cl();
+  //     delay(500);
+  //     move_forward_cl();
+  //     delay(1000);
+  //     robot_current_state = moving;
+  //     break;
+
+  //   case(avoid_obstacle_left):
+  //     move_backward_cl();
+  //     delay(2000);
+  //     turn_right_cl();
+  //     delay(500);
+  //     move_forward_cl();
+  //     delay(1000);
+  //     robot_current_state = moving;
+  //     break;
+
+  //   case(searching_puck):
+  //     search_puck();
+  //     break;
+
+  //   case(get_puck):
+  //     search_goal();
+  //     break;
+
+  //   case(finding_goal):
+  //   case(moving):
+  //     move_forward_cl();
+  //     delay(1000);
+  //     break;
+    
+  //   default:
+  //     break;
+  // }
+  
   delay(20);
 }
