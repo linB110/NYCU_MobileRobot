@@ -33,10 +33,8 @@ const unsigned long Motion_control_period = 20;
 int ambient_light = 900;
 const int light_threshold = 20;
 const int close_to_puck = 100;
-const int in_right_direction_threshold = 100;
+const int in_right_direction_threshold = 15;
 int last_detected_light = 1024;
-
-bool have_search = false;
 
 // find lighting obj (puck) flags
 bool obj_found = false;
@@ -160,7 +158,7 @@ void rotate_ccw_to_diff(long target_diff)
   stop_motors();
 }
 
-void search_puck2()
+void search_puck()
 {
   const int   num_steps  = 7;     
   const long  step_ticks = 200;   
@@ -199,57 +197,6 @@ void search_puck2()
 }
 
 // ========================
-
-
-
-
-void search_puck()
-{
-  bool direction_is_left = find_obj_direction();
-  if (direction_is_left) {
-    rotate_ccw();
-    delay(500);
-  }else {
-    rotate_cw();
-    delay(500);
-  }
-
-  delay(100);
-  move_forward_cl();
-  delay(300);
-}
-
-bool find_obj_direction()
-{
-  // 1. turn left and read
-  rotate_ccw();
-  delay(400);
-  stop_motors();
-  delay(100);
-  int left_reading = read_ambient_light(10);
-
-  // 2. turn right and read
-  rotate_cw();
-  delay(800);          
-  stop_motors();
-  delay(100);
-  int right_reading = read_ambient_light(10);
-
-  // decision making
-  bool go_left = (left_reading < right_reading);
-
-  if (go_left) {
-    rotate_ccw();
-    delay(400);
-  } else {
-    rotate_cw();
-    delay(200);
-  }
-
-  stop_motors();
-  return go_left;
-}
-
 
 BeaconType detect_beacon(int detect_times = 3)
 {
@@ -294,11 +241,11 @@ BeaconType detect_beacon(int detect_times = 3)
 }
 
 
-void search_goal()
+void searching_goal()
 {
   BeaconType bc;
 
-  for (int i = 0; i < 20; i++){
+  for (int i = 0; i < 5; i++){
     rotate_ccw();
     delay(200);
     stop_motors();
@@ -343,9 +290,6 @@ void update_robot_state()
   int v = read_ambient_light();
   int diff = ambient_light - v;
 
-  // if (robot_current_state == approaching_puck && diff > (light_threshold / 2) ) 
-  //   return;
-
   // direction is right => move forward
   if (diff > close_to_puck) {
     robot_current_state = approaching_puck;   
@@ -354,7 +298,7 @@ void update_robot_state()
 
   // direction could be wrong => search to make decision
   if (diff > light_threshold) {
-    robot_current_state = searching_puck;
+      robot_current_state = searching_puck;;
     return;
   }
   
@@ -431,8 +375,6 @@ void main_procedure()
     break;
 
     case(searching_puck):
-      if(have_search)
-        break;
       MsTimer2::stop();
       search_puck2();
       MsTimer2::start();
@@ -440,11 +382,10 @@ void main_procedure()
       break;
 
     case(get_puck):
-      search_goal();
+      searching_goal();
       break;
 
     case (approaching_puck):
-      have_search = true;
     case(finding_goal):
     case(moving):
       move_forward_cl();
