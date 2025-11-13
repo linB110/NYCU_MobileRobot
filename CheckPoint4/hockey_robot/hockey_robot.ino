@@ -33,6 +33,10 @@ const unsigned long Motion_control_period = 20;
 int ambient_light = 900;
 const int light_threshold = 20;
 const int close_to_puck = 100;
+const int in_right_direction_threshold = 100;
+int last_detected_light = 1024;
+
+bool have_search = false;
 
 // find lighting obj (puck) flags
 bool obj_found = false;
@@ -122,53 +126,79 @@ bool find_lighting_obj(int detected_light_value)
   return false; 
 }
 
+// ========================
+void rotate_cw_step_ticks(long step_ticks)
+ {
+  long start = get_diff_ticks();
+
+  rotate_cw();
+  while (labs(get_diff_ticks() - start) < step_ticks) {
+  }
+  stop_motors();
+}
+
+void rotate_ccw_step_ticks(long step_ticks)
+{
+  if (step_ticks < 0) step_ticks = -step_ticks;
+
+  long start = get_diff_ticks();
+
+  rotate_ccw();
+  while (labs(get_diff_ticks() - start) < step_ticks) {}
+  stop_motors();
+}
+
+void rotate_ccw_to_diff(long target_diff)
+{
+  rotate_ccw();
+  if (get_diff_ticks() > target_diff) {
+    while (get_diff_ticks() > target_diff) {}
+  } else {
+    while (get_diff_ticks() < target_diff) {
+    }
+  }
+  stop_motors();
+}
+
 void search_puck2()
 {
-  // 掃描參數，可以依照實際調整
-  const int step_ms   = 150;   // 每個角度停多久
-  const int num_steps = 10;    // 一共掃幾個角度（越大掃越大圈）
+  const int   num_steps  = 7;     
+  const long  step_ticks = 200;   
 
-  // 1. 由當前朝向開始，順時針掃描
-  int best_light = 1024;
-  int best_step  = 0;
+  int  best_light = 1024;
+  int  best_step  = 0;
 
-  // 先確保馬達停止
   stop_motors();
   delay(50);
 
-  // 往右開始掃
-  for (int i = 0; i <= num_steps; i++) {
+  reset_ticks();
+  long base_diff = get_diff_ticks();   
 
-    // 停一下量光
+  for (int i = 0; i < num_steps; i++) {
+
     stop_motors();
-    delay(50);
+    delay(50);                    
+
     int v = read_ambient_light(10);
     if (v < best_light) {
       best_light = v;
       best_step  = i;
     }
 
-    // 最後一個點就不要再轉了
-    if (i < num_steps) {
-      // 持續順時針轉 step_ms
-      rotate_cw();
-      delay(step_ms);
-    }
+    rotate_cw_step_ticks(step_ticks);
   }
 
-  // 2. 現在在最右側，從右邊往左轉回到最佳步數
-  int steps_from_right_to_best = num_steps - best_step;
+  long final_diff = get_diff_ticks();
 
-  if (steps_from_right_to_best > 0) {
-    rotate_ccw();
-    for (int i = 0; i < steps_from_right_to_best; i++) {
-      delay(step_ms);
-    }
-  }
+  long target_diff = base_diff + (long)best_step * step_ticks;
 
-  // 3. 最後停車，現在大約就對準「最亮方向」
+  rotate_ccw_to_diff(target_diff);
+
   stop_motors();
+  reset_ticks();
 }
+
+// ========================
 
 
 
@@ -305,7 +335,7 @@ void setup()
   // ambient light calibration   
   ambient_light = read_ambient_light(15);  
 
-  robot_current_state = moving;
+  //robot_current_state = moving;
 }
 
 void update_robot_state()
@@ -367,6 +397,7 @@ void main_procedure()
       unsigned long t1 = millis();
       while (millis() - t1 < 500) {
         turn_left_cl();
+        rotate_ccw_step_ticks(500);
         delay(20);
       }
     }
@@ -389,6 +420,7 @@ void main_procedure()
     {
       unsigned long t1 = millis();
       while (millis() - t1 < 500) {
+        rotate_cw_step_ticks(-500);
         turn_right_cl();
         delay(20);
       }
@@ -399,6 +431,8 @@ void main_procedure()
     break;
 
     case(searching_puck):
+      if(have_search)
+        break;
       MsTimer2::stop();
       search_puck2();
       MsTimer2::start();
@@ -410,10 +444,10 @@ void main_procedure()
       break;
 
     case (approaching_puck):
+      have_search = true;
     case(finding_goal):
     case(moving):
       move_forward_cl();
-      delay(1000);
       break;
     
     default:
@@ -433,35 +467,44 @@ void loop()
   // delay(500);
   // turn_right_cl();
   //turn_left_cl();
-  move_forward_cl();
+  //move_forward_cl();
   // move_backward_cl();
+  //motor_control(90, IN3, IN4, ENA);
+  //digitalWrite(7, HIGH);
+  //digitalWrite(8, LOW);
+  //delay(1000);
+  // stop_motors();
+  // delay(1000);
+  // int v = digitalRead(IN2);
+  // Serial.print("lightness = ");
+  // Serial.println(v);
   // ============================
    
   // obstacle avoidance has highest priority in all states
-  // noInterrupts();
+  noInterrupts();
 
-  // bool right_touched = right_hit;
-  // bool left_touched = left_hit;
-  // bool target_touched = end_hit;
+  bool right_touched = right_hit;
+  bool left_touched = left_hit;
+  bool target_touched = end_hit;
 
-  // // reset flags
-  // right_hit = left_hit = end_hit = false; 
+  // reset flags
+  right_hit = left_hit = end_hit = false; 
 
-  // interrupts();
+  interrupts();
       
-  // if (right_touched)
-  //   robot_current_state = avoid_obstacle_right;
+  if (right_touched)
+    robot_current_state = avoid_obstacle_right;
   
-  // if (left_touched)
-  //   robot_current_state = avoid_obstacle_left;
+  if (left_touched)
+    robot_current_state = avoid_obstacle_left;
 
-  // if (target_touched){
-  //   robot_current_state = get_puck;
-  //   has_puck = true;
-  // }//else
-  //   //has_puck = false;
+  if (target_touched){
+    robot_current_state = get_puck;
+    has_puck = true;
+  }//else
+    //has_puck = false;
 
-  // main_procedure(); 
+  main_procedure(); 
   
-  delay(20);
+  delay(500);
 }
