@@ -17,11 +17,12 @@ enum RobotState {
   avoid_obstacle_left,
   avoid_obstacle_right,
   searching_puck,
+  approaching_puck,
   get_puck,
   finding_goal
 };
 
-RobotState robot_current_state = idle;
+volatile RobotState robot_current_state = idle;
 
 // Use timer interrupt to activate motion close loop control
 const unsigned long Motion_control_period = 20;
@@ -29,13 +30,13 @@ const unsigned long Motion_control_period = 20;
 // ---------- lighting puck  ----------
 // lighting threshold
 // use tuning_ambient_light function to modify value for usage
-int ambient_light = 800;
+int ambient_light = 900;
 const int light_threshold = 20;
+const int close_to_puck = 100;
 
-// find lighting obj (puck) 
+// find lighting obj (puck) flags
 bool obj_found = false;
 bool has_puck = false;
-int detected_lughtness = 1024;  // darkest value in default
 
 // sample infrared 
 unsigned long start_time = 0;
@@ -64,8 +65,8 @@ void motion_control_ISR()
   int pwmR = 0, pwmL = 0;
   const int max_comp = 60;     
   const int min_pwm  = 80;     
-  const float Kp = 0.8f;
-  const int ticks_tolerance = 100;
+  const float Kp = 0.5f;
+  const int ticks_tolerance = 50;
 
   long error = 0;
   const int turn_target = 300;
@@ -86,6 +87,7 @@ void motion_control_ISR()
 
   switch (robot_current_state){
     case (moving):
+    case (approaching_puck):
       error = diff;                
       apply_pid(error);
       break;
@@ -120,6 +122,57 @@ bool find_lighting_obj(int detected_light_value)
   return false; 
 }
 
+void search_puck2()
+{
+  // 掃描參數，可以依照實際調整
+  const int step_ms   = 150;   // 每個角度停多久
+  const int num_steps = 10;    // 一共掃幾個角度（越大掃越大圈）
+
+  // 1. 由當前朝向開始，順時針掃描
+  int best_light = 1024;
+  int best_step  = 0;
+
+  // 先確保馬達停止
+  stop_motors();
+  delay(50);
+
+  // 往右開始掃
+  for (int i = 0; i <= num_steps; i++) {
+
+    // 停一下量光
+    stop_motors();
+    delay(50);
+    int v = read_ambient_light(10);
+    if (v < best_light) {
+      best_light = v;
+      best_step  = i;
+    }
+
+    // 最後一個點就不要再轉了
+    if (i < num_steps) {
+      // 持續順時針轉 step_ms
+      rotate_cw();
+      delay(step_ms);
+    }
+  }
+
+  // 2. 現在在最右側，從右邊往左轉回到最佳步數
+  int steps_from_right_to_best = num_steps - best_step;
+
+  if (steps_from_right_to_best > 0) {
+    rotate_ccw();
+    for (int i = 0; i < steps_from_right_to_best; i++) {
+      delay(step_ms);
+    }
+  }
+
+  // 3. 最後停車，現在大約就對準「最亮方向」
+  stop_motors();
+}
+
+
+
+
 void search_puck()
 {
   bool direction_is_left = find_obj_direction();
@@ -138,28 +191,35 @@ void search_puck()
 
 bool find_obj_direction()
 {
-  // rotate left and read
+  // 1. turn left and read
   rotate_ccw();
-  delay(1000);
+  delay(400);
   stop_motors();
-  delay(200);
+  delay(100);
   int left_reading = read_ambient_light(10);
 
-  // rotate right and read
+  // 2. turn right and read
   rotate_cw();
-  delay(1000);
+  delay(800);          
   stop_motors();
-  delay(200);
+  delay(100);
   int right_reading = read_ambient_light(10);
 
-  if (right_reading < left_reading)
-    return false;
-  
-  rotate_ccw();
-  delay(1000);
+  // decision making
+  bool go_left = (left_reading < right_reading);
 
-  return left_reading < right_reading ? true : false;
+  if (go_left) {
+    rotate_ccw();
+    delay(400);
+  } else {
+    rotate_cw();
+    delay(200);
+  }
+
+  stop_motors();
+  return go_left;
 }
+
 
 BeaconType detect_beacon(int detect_times = 3)
 {
@@ -244,12 +304,26 @@ void setup()
  
   // ambient light calibration   
   ambient_light = read_ambient_light(15);  
+
+  robot_current_state = moving;
 }
 
 void update_robot_state()
 {
-  obj_found = find_lighting_obj(read_ambient_light());
-  if (obj_found){
+  int v = read_ambient_light();
+  int diff = ambient_light - v;
+
+  // if (robot_current_state == approaching_puck && diff > (light_threshold / 2) ) 
+  //   return;
+
+  // direction is right => move forward
+  if (diff > close_to_puck) {
+    robot_current_state = approaching_puck;   
+    return;
+  }
+
+  // direction could be wrong => search to make decision
+  if (diff > light_threshold) {
     robot_current_state = searching_puck;
     return;
   }
@@ -269,29 +343,6 @@ void update_robot_state()
 
 void main_procedure()
 {
-  noInterrupts();
-
-  bool right_touched = right_hit;
-  bool left_touched = left_hit;
-  bool target_touched = end_hit;
-
-  // reset flags
-  right_hit = left_hit = end_hit = false; 
-  
-  interrupts();
-  
-  if (right_touched)
-    robot_current_state = avoid_obstacle_right;
-  
-  if (left_touched)
-    robot_current_state = avoid_obstacle_left;
-
-  if (target_touched){
-    robot_current_state = get_puck;
-    has_puck = true;
-  }//else
-    //has_puck = false;
-
   // update Robot State (if no obstacle to avoid)
   if (robot_current_state != avoid_obstacle_right &&
     robot_current_state != avoid_obstacle_left  &&
@@ -348,13 +399,17 @@ void main_procedure()
     break;
 
     case(searching_puck):
-      search_puck();
+      MsTimer2::stop();
+      search_puck2();
+      MsTimer2::start();
+      robot_current_state = approaching_puck;
       break;
 
     case(get_puck):
       search_goal();
       break;
 
+    case (approaching_puck):
     case(finding_goal):
     case(moving):
       move_forward_cl();
@@ -375,85 +430,38 @@ void loop()
   // int v = read_ambient_light();
   // Serial.print("lightness = ");
   // Serial.println(v);
-
+  // delay(500);
   // turn_right_cl();
-  // turn_left_cl();
-  // move_forward_cl();
+  //turn_left_cl();
+  move_forward_cl();
   // move_backward_cl();
   // ============================
    
   // obstacle avoidance has highest priority in all states
-  noInterrupts();
+  // noInterrupts();
 
-  bool right_touched = right_hit;
-  bool left_touched = left_hit;
-  bool target_touched = end_hit;
+  // bool right_touched = right_hit;
+  // bool left_touched = left_hit;
+  // bool target_touched = end_hit;
 
-  // reset flags
-  right_hit = left_hit = end_hit = false; 
+  // // reset flags
+  // right_hit = left_hit = end_hit = false; 
 
-  interrupts();
+  // interrupts();
       
-  if (right_touched)
-    robot_current_state = avoid_obstacle_right;
+  // if (right_touched)
+  //   robot_current_state = avoid_obstacle_right;
   
-  if (left_touched)
-    robot_current_state = avoid_obstacle_left;
+  // if (left_touched)
+  //   robot_current_state = avoid_obstacle_left;
 
-  if (target_touched){
-    robot_current_state = get_puck;
-    has_puck = true;
-  }//else
+  // if (target_touched){
+  //   robot_current_state = get_puck;
+  //   has_puck = true;
+  // }//else
   //   //has_puck = false;
 
-  main_procedure(); 
-
-  // // update Robot State (if no obstacle to avoid)
-  // if (robot_current_state != avoid_obstacle_right &&
-  //   robot_current_state != avoid_obstacle_left  &&
-  //   robot_current_state != get_puck) {
-  //   update_robot_state();
-  // }
-
-  // // robot behave with different state
-  // switch (robot_current_state){
-  //   case(avoid_obstacle_right):
-  //     move_backward_cl();
-  //     delay(2000);
-  //     turn_left_cl();
-  //     delay(500);
-  //     move_forward_cl();
-  //     delay(1000);
-  //     robot_current_state = moving;
-  //     break;
-
-  //   case(avoid_obstacle_left):
-  //     move_backward_cl();
-  //     delay(2000);
-  //     turn_right_cl();
-  //     delay(500);
-  //     move_forward_cl();
-  //     delay(1000);
-  //     robot_current_state = moving;
-  //     break;
-
-  //   case(searching_puck):
-  //     search_puck();
-  //     break;
-
-  //   case(get_puck):
-  //     search_goal();
-  //     break;
-
-  //   case(finding_goal):
-  //   case(moving):
-  //     move_forward_cl();
-  //     delay(1000);
-  //     break;
-    
-  //   default:
-  //     break;
-  // }
+  // main_procedure(); 
   
   delay(20);
 }
