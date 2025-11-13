@@ -55,7 +55,7 @@ enum BeaconType{
 };
 
 BeaconType searched_beacon = None;
-BeaconType target_beacon = B600;
+BeaconType target_beacon = B1500;
 
 // ---------- Functions ----------
 void motion_control_ISR()
@@ -287,6 +287,11 @@ void setup()
 
 void update_robot_state()
 {
+  if (has_puck){
+    robot_current_state = finding_goal;
+    return;
+  }
+  
   int v = read_ambient_light();
   int diff = ambient_light - v;
 
@@ -376,7 +381,7 @@ void main_procedure()
 
     case(searching_puck):
       MsTimer2::stop();
-      search_puck2();
+      search_puck();
       MsTimer2::start();
       robot_current_state = approaching_puck;
       break;
@@ -439,7 +444,7 @@ void loop()
   if (left_touched)
     robot_current_state = avoid_obstacle_left;
 
-  if (target_touched){
+  if (target_touched && !has_puck){
     robot_current_state = get_puck;
     has_puck = true;
   }//else
@@ -447,5 +452,5 @@ void loop()
 
   main_procedure(); 
   
-  delay(500);
+  delay(20);
 }
