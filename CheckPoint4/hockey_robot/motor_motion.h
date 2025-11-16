@@ -25,8 +25,8 @@ extern const int ENCODER_L_B;
 #define PPA 3500.0f / 360.0f
 #endif
 
-#ifndef PPb  // pulse per angle with puck
-#define PPb 3915.0f / 360.0f
+#ifndef PPA_p  // pulse per angle with puck
+#define PPA_p 3915.0f / 360.0f
 #endif
 
 #ifndef SPEED_WINDOW_MS
