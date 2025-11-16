@@ -17,9 +17,18 @@ extern const int ENCODER_L_A;
 extern const int ENCODER_L_B;
 
 // ---------- Params ----------
-#ifndef PPR
+#ifndef PPR   // pulse per revolution
 #define PPR 960.0f
 #endif
+
+#ifndef PPA  // pulse per angle without puck
+#define PPA 3500.0f / 360.0f
+#endif
+
+#ifndef PPb  // pulse per angle with puck
+#define PPb 3915.0f / 360.0f
+#endif
+
 #ifndef SPEED_WINDOW_MS
 #define SPEED_WINDOW_MS 500
 #endif
@@ -34,21 +43,23 @@ float read_right_rpm();
 // read imuplse
 int read_right_pulse();
 int read_left_pulse();
+long get_diff_ticks();
 void reset_ticks();
 
-// motor control (open loop)
+// update ticks
+void update_right_ticks();
+void update_left_ticks();
+
+// motor control (abstract)
 void motor_control(int pwm, int inA, int inB, int enable);
 
-void move_forward(int pwm = 90);
-void move_backward(int pwm = 95);
-void turn_left(int inner_pwm = 115, int outer_pwm = 170);
-void turn_right(int inner_pwm = 115, int outer_pwm = 170);
-void rotate_ccw(int inner_pwm = -115, int outer_pwm = 130);
-void rotate_cw(int inner_pwm = -115, int outer_pwm = 130);
+// motor control (closed loop)
+void move_forward();
+void move_backward();
+void turn_right();
+void turn_left();
+void rotate_cw(int pwm = 85);
+void rotate_ccw(int pwm = 85);
 void stop_motors();
 
-// motor control (closed loop)
-void move_forward_cl();
-void move_backward_cl();
-void turn_right_cl();
-void turn_left_cl();
+void rotate_angle(float angle);
