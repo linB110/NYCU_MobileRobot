@@ -29,10 +29,6 @@ const int ticks_tolerance = 10;
 const int ticks_turning_diff = 300;
 const float Kp = 0.8f;
 
-// ---- ISR ----
-void right_wheel_isr();
-void left_wheel_isr();
-
 // ==================================================
 // initialization
 // ==================================================
@@ -52,15 +48,15 @@ void motor_encoder_begin()
   pinMode(ENCODER_L_A, INPUT_PULLUP);
   pinMode(ENCODER_L_B, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_R_A), right_wheel_isr, RISING);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_L_A), left_wheel_isr,  RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_R_A), update_right_ticks, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_L_A), update_left_ticks,  RISING);
 
   last_left_speed_ts  = millis();
   last_right_speed_ts = millis();
 }
 
 
-void right_wheel_isr()
+void update_right_ticks()
 {
   if (digitalRead(ENCODER_R_B) == HIGH) {
     right_ticks++;
@@ -69,7 +65,7 @@ void right_wheel_isr()
   }
 }
 
-void left_wheel_isr()
+void update_left_ticks()
 {
   if (digitalRead(ENCODER_L_B) == HIGH) {
     left_ticks++;
@@ -137,6 +133,13 @@ int read_left_pulse()
   return l_ticks;
 }
 
+long get_diff_ticks() 
+{
+  long r = read_right_pulse();
+  long l = read_left_pulse();
+  return r - l;   
+}
+
 void reset_ticks()
 {
   right_ticks = 0;
@@ -157,42 +160,6 @@ void motor_control(int pwm, int inA, int inB, int enable)
   analogWrite(enable, pwmVal);
 }
 
-void move_forward(int pwm)
-{
-  motor_control(pwm, IN1, IN2, ENA);
-  motor_control(pwm, IN3, IN4, ENB);
-}
-
-void move_backward(int pwm)
-{
-  motor_control(-pwm, IN1, IN2, ENA);
-  motor_control(-pwm, IN3, IN4, ENB);
-}
-
-void turn_right(int inner_pwm, int outer_pwm)
-{
-  motor_control(inner_pwm, IN1, IN2, ENA);   
-  motor_control(outer_pwm, IN3, IN4, ENB);  
-}
-
-void turn_left(int inner_pwm, int outer_pwm)
-{
-  motor_control(outer_pwm, IN1, IN2, ENA);   
-  motor_control(inner_pwm, IN3, IN4, ENB);   
-}
-
-void rotate_ccw(int inner_pwm, int outer_pwm)
-{
-  motor_control(outer_pwm+10, IN1, IN2, ENA);   
-  motor_control(inner_pwm-5, IN3, IN4, ENB);
-}
-
-void rotate_cw(int inner_pwm, int outer_pwm)
-{
-  motor_control(inner_pwm, IN1, IN2, ENA);   
-  motor_control(outer_pwm+20, IN3, IN4, ENB);
-}
-
 void stop_motors()
 {
   motor_control(0, IN1, IN2, ENA);
@@ -202,7 +169,7 @@ void stop_motors()
 // ==================================================
 // motor control (closed loop)
 // ==================================================
-void move_forward_cl()
+void move_forward()
 {
   long r_pulse = read_right_pulse();
   long l_pulse = read_left_pulse();
@@ -213,7 +180,7 @@ void move_forward_cl()
     error = 0;
 
   const int max_comp = 60;
-  const int min_pwm = 80;
+  const int min_pwm = 110;
   int comp = (int)(Kp * error);
   comp = constrain(comp, -max_comp, max_comp);
 
@@ -227,7 +194,7 @@ void move_forward_cl()
   motor_control(pwm_left,  IN3, IN4, ENB);
 }
 
-void move_backward_cl()
+void move_backward()
 {
   long r_pulse = read_right_pulse();
   long l_pulse = read_left_pulse();
@@ -251,7 +218,7 @@ void move_backward_cl()
   motor_control(-pwm_left_mag,  IN3, IN4, ENB);
 }
 
-void turn_right_cl()
+void turn_right()
 {
   long r_pulse = read_right_pulse();
   long l_pulse = read_left_pulse();
@@ -277,7 +244,7 @@ void turn_right_cl()
   motor_control(pwm_left,  IN3, IN4, ENB);
 }
 
-void turn_left_cl()
+void turn_left()
 {
   long r_pulse = read_right_pulse();
   long l_pulse = read_left_pulse();
@@ -301,4 +268,63 @@ void turn_left_cl()
 
   motor_control(pwm_right, IN1, IN2, ENA);
   motor_control(pwm_left,  IN3, IN4, ENB);
+}
+
+void rotate_cw(int pwm)
+{
+  const int base_pwm = 85;
+  pwm = constrain(pwm, base_pwm, 255);
+
+  motor_control(-pwm, IN1, IN2, ENA);
+  motor_control(pwm, IN3, IN4, ENB);
+}
+
+void rotate_ccw(int pwm)
+{
+  const int base_pwm = 85;
+  pwm = constrain(pwm, base_pwm, 255);
+
+  motor_control(pwm, IN1, IN2, ENA);
+  motor_control(-pwm, IN3, IN4, ENB);
+}
+
+void rotate_angle(float angle)
+{
+  if (fabs(angle) < 0.5f)
+    return;
+
+  const long target_ticks = (long)(fabs(angle) * PPA);
+  reset_ticks();
+
+  const bool cw = (angle > 0);
+  const int fast_pwm = 105;   
+  const int slow_pwm = 85;    
+  const long slow_region = (long)(0.15f * target_ticks); 
+
+  while (true) {
+    long d = labs(get_diff_ticks());
+    long remaining = target_ticks - d;
+
+    if (remaining <= 0) {
+      break;   
+    }
+
+    int pwm;
+    if (remaining > slow_region) {
+      pwm = fast_pwm;
+    } else {
+      float ratio = (float)remaining / (float)slow_region;  
+      pwm = (int)(slow_pwm + (fast_pwm - slow_pwm) * ratio);
+    }
+
+    if (cw) {
+      rotate_cw(pwm);
+    } else {
+      rotate_ccw(pwm);
+    }
+
+    delay(3);
+  }
+
+  stop_motors();
 }
