@@ -11,8 +11,8 @@
 const int light_sensor = A0;
 const int IR_sensor = 12;
 
-const int ambient_light = 860;  // change it for different env
-const int detected_puck_val = 750; // threshold of detecting puck
+const int ambient_light = 850;  // change it for different env
+const int detected_puck_val = 800; // threshold of detecting puck
 
 enum BeaconType{
   None = 0,
