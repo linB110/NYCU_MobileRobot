@@ -8,11 +8,11 @@
 #endif
 
 // ---------- sensor pins ----------
-extern const int light_sensor;
-extern const int IR_sensor;
+const int light_sensor = A0;
+const int IR_sensor = 12;
 
-const int ambient_light = 900;  // change it for different env
-const int light_threshold = 20;
+const int ambient_light = 860;  // change it for different env
+const int detected_puck_val = 750; // threshold of detecting puck
 
 enum BeaconType{
   None = 0,
@@ -20,9 +20,8 @@ enum BeaconType{
   B600
 };
 
-BeaconType searched_beacon = None;
-BeaconType target_beacon = B1500; // change it if different beacon is set
-
+extern BeaconType searched_beacon;
+extern BeaconType target_beacon;
 // initialization
 void search_sensor_init();
 
@@ -31,6 +30,6 @@ int read_light_sensor(int sample_times);
 bool try_search_puck();
 
 // searching_goal
-float read_IR_sensor(float time_interval);
+float read_IR_sensor(float time_interval_ms);
 BeaconType detect_beacon();
 bool try_search_goal();
