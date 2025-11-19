@@ -1,6 +1,8 @@
 #include "searching.h"
 #include "motor_motion.h"
 
+const unsigned long sample_us = 100000; 
+
 void search_sensor_init()
 {
   pinMode(light_sensor, INPUT);
@@ -19,88 +21,169 @@ int read_light_sensor(int sample_times)
 bool try_search_puck()
 {
   stop_motors();
-  delay(5);
+  delay(50);
 
-  int lightest = 1023;      
-  int lightest_step = 0;
+  const long ticks_360 = (long)(360.0f * PPA); 
+  const int sample_every_ticks = 50;          
 
-  const float angle_step = 360.0f / Search_step; 
+  reset_ticks();
+  long last_sample_tick = 0;
 
-  for (int i = 0; i < Search_step; i++) {
-    int v = read_light_sensor(5);
+  int   best_light  = 1023;
+  float best_angle  = 0.0f;
 
-    if (v < lightest) {
-      lightest = v;
-      lightest_step = i;
+  int pwm = 100;         
+  rotate_cw(pwm);        
+
+  while (true) {
+    long d = labs(get_diff_ticks());
+
+    if (d >= ticks_360) {
+      break;
     }
 
-    delay(5);
-    rotate_angle(angle_step);
-    delay(5);
-  }
+    if (d - last_sample_tick >= sample_every_ticks) {
+      last_sample_tick = d;
 
-  if (lightest > detected_puck_val) {
-    return false;
-  }
+      int v = read_light_sensor(3);
+      float angle = 360.0f * (float)d / (float)ticks_360;
 
-  if (lightest_step > (Search_step / 2)) {
-    for (int i = 0; i < Search_step - lightest_step; i++) {
-      rotate_angle(-angle_step);
-      delay(5);
+      if (v < best_light) {
+        best_light = v;
+        best_angle = angle;
+      }
     }
-  } else {
-    for (int i = 0; i < lightest_step; i++) {
-      rotate_angle(angle_step);
-      delay(5);
-    }
+
+    delay(2);
   }
 
   stop_motors();
-  reset_ticks();
+
+  if (best_light > detected_puck_val) {
+    return false;
+  }
+
+  float delta = best_angle - 360.0f;   
+
+  rotate_angle(delta);     
+  stop_motors();
+  reset_ticks();           
 
   return true;
 }
 
+float measure_ratio_once(int pin)
+ {
+  unsigned long count_low = 0;
+  unsigned long total_count = 0;
 
-float read_IR_sensor(float time_interval_ms)
-{
-  unsigned long start = micros();
-  unsigned long duration = (unsigned long)(time_interval_ms * 1e3);  // ms -> µs
-
-  unsigned long count0 = 0;
-  unsigned long count1 = 0;
-
-  while (micros() - start < duration) {
-      int v = digitalRead(IR_sensor);
-      if (v == LOW) count0++;
-      else          count1++;
+  unsigned long t_end = micros() + sample_us;
+  while ((long)(t_end - micros()) > 0) {
+    if (digitalRead(pin) == LOW)
+      count_low++;
+    total_count++;
   }
 
-  unsigned long total = count0 + count1;
-  if (total == 0) return 0.0;
-
-  return (float)count0 / (float)total;
+  if (total_count == 0) return -1;
+  return (float)count_low / (float)total_count;
 }
+
+float measure_beacon_ratio(int pin, float duration_seconds)
+ {
+  unsigned long duration_ms = (unsigned long)(duration_seconds * 1000);
+  unsigned long start = millis();
+
+  float rmin = 999;
+  float rmax = -1;
+  float sum  = 0;
+  int count  = 0;
+
+  while (millis() - start < duration_ms) {
+    float ratio = measure_ratio_once(pin);
+
+    if (ratio >= 0) {
+      if (ratio < rmin) rmin = ratio;
+      if (ratio > rmax) rmax = ratio;
+      sum += ratio;
+      count++;
+    }
+
+    delay(20);
+  }
+
+  if (count == 0)
+    return -1;
+
+  float avg = sum / count;
+
+  return avg;
+}
+
 
 BeaconType detect_beacon()
 {
-  float ratio_avg = 0.0;
-  for (int i = 0; i < 10; i++){
-    float ratio = read_IR_sensor(0.1);
-    ratio_avg += ratio;    
-  }  
-  ratio_avg /= 10.0f;
+  float ratio = measure_beacon_ratio(IR_sensor, 1.0); 
 
-  if (ratio_avg >= 0.27 && ratio_avg <= 0.32)
-      return B600;
+  if (ratio >= 0.20 && ratio <= 0.32) 
+    return B600;
 
-  if (ratio_avg >= 0.40 && ratio_avg <= 0.45)
-      return B1500;
+  if (ratio >= 0.40 && ratio <= 0.45) 
+    return B1500;
 
   return None;
 }
 
 bool try_search_goal()
 {
+  stop_motors();
+  delay(50);
 
+  const long ticks_360 = (long)(360.0f * PPA); 
+  const int sample_every_ticks = 50;          
+
+  reset_ticks();
+  long last_sample_tick = 0;
+
+  int   best_light  = 1023;
+  float best_angle  = 0.0f;
+
+  int pwm = 100;         
+  rotate_cw(pwm);        
+
+  while (true) {
+    long d = labs(get_diff_ticks());
+
+    if (d >= ticks_360) {
+      break;
+    }
+
+    if (d - last_sample_tick >= sample_every_ticks) {
+      last_sample_tick = d;
+
+      int v = read_light_sensor(3);
+      float angle = 360.0f * (float)d / (float)ticks_360;
+
+      if (v < best_light) {
+        best_light = v;
+        best_angle = angle;
+      }
+    }
+
+    delay(2);
+  }
+
+  stop_motors();
+
+  if (best_light > detected_puck_val) {
+    return false;
+  }
+
+  float delta = best_angle - 360.0f;   
+
+  rotate_angle(delta);     
+  stop_motors();
+  reset_ticks();           
+
+  return true;
 }
+
