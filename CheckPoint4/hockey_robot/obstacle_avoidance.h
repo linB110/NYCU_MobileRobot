@@ -14,9 +14,10 @@ extern volatile bool left_hit;
 extern volatile bool end_hit;
 
 // initialization
-void sensor_init();
+void touch_sensor_init();
 
-// obstacle avoidance
+// obstacle avoidance sensing
 void touched_right();
 void touched_left();
 void touched_target();
+
