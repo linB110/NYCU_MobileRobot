@@ -7,7 +7,7 @@ volatile bool right_hit = false;
 volatile bool left_hit  = false;
 volatile bool end_hit   = false;
 
-void sensor_init()
+void touch_sensor_init()
 {
   pinMode(touch_sensor_right, INPUT);
   pinMode(touch_sensor_left, INPUT);
