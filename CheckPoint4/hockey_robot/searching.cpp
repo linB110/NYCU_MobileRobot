@@ -138,52 +138,62 @@ bool try_search_goal()
   stop_motors();
   delay(50);
 
-  const long ticks_360 = (long)(360.0f * PPA); 
-  const int sample_every_ticks = 50;          
+  const int   steps = 12;                    
+  const float angle_step = 360.0f / steps;        
 
-  reset_ticks();
-  long last_sample_tick = 0;
+  int   best_step = -1;      
+  float best_err  = 1e9;     
 
-  int   best_light  = 1023;
-  float best_angle  = 0.0f;
+  float ideal_ratio = 0.0f;
+  float max_toler   = 0.0f;  
 
-  int pwm = 100;         
-  rotate_cw(pwm);        
-
-  while (true) {
-    long d = labs(get_diff_ticks());
-
-    if (d >= ticks_360) {
-      break;
-    }
-
-    if (d - last_sample_tick >= sample_every_ticks) {
-      last_sample_tick = d;
-
-      int v = read_light_sensor(3);
-      float angle = 360.0f * (float)d / (float)ticks_360;
-
-      if (v < best_light) {
-        best_light = v;
-        best_angle = angle;
-      }
-    }
-
-    delay(2);
-  }
-
-  stop_motors();
-
-  if (best_light > detected_puck_val) {
+  if (target_beacon == B600) {
+    ideal_ratio = 0.25f;   
+    max_toler   = 0.05f;     
+  } else if (target_beacon == B1500) {
+    ideal_ratio = 0.425f;   
+    max_toler   = 0.05f;     
+  } else {
     return false;
   }
 
-  float delta = best_angle - 360.0f;   
+  for (int i = 0; i < steps; i++) {
 
-  rotate_angle(delta);     
+    stop_motors();
+    delay(50);   
+
+    float ratio = measure_beacon_ratio(IR_sensor, 0.2f);  
+
+    if (ratio >= 0.0f) {
+      float err = fabs(ratio - ideal_ratio);  
+
+      if (err < best_err && err <= max_toler) {
+        best_err  = err;
+        best_step = i;
+      }
+    }
+
+    rotate_angle(angle_step);
+    delay(20);
+  }
+
   stop_motors();
-  reset_ticks();           
+
+  if (best_step < 0) {
+    return false;
+  }
+
+  float target_angle = best_step * angle_step;   
+  float delta = target_angle - 360.0f;          
+
+  if (delta > 180.0f)  delta -= 360.0f;
+  if (delta < -180.0f) delta += 360.0f;
+
+  rotate_angle(delta);
+  stop_motors();
+  reset_ticks();   
 
   return true;
 }
+
 
