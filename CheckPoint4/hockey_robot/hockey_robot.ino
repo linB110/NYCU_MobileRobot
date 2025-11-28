@@ -86,8 +86,8 @@ void motion_control_ISR()
   long diff = r - l;
 
   int pwmR = 0, pwmL = 0;
-  const int max_comp = 60;     
-  const int min_pwm  = 80;     
+  const int max_comp = 80;     
+  const int min_pwm  = 120;     
   const float Kp = 0.5f;
   const int ticks_tolerance = 50;
 
@@ -99,8 +99,12 @@ void motion_control_ISR()
     int comp = (int)(Kp * error);
     comp = constrain(comp, -max_comp, max_comp);
     int base = min_pwm;
-    int left  = max(base + comp, base);
-    int right = max(base - comp, base);
+    int left  = base + comp;
+    int right = base - comp;
+
+    left  = constrain(left,  0, 255);
+    right = constrain(right, 0, 255);
+
     pwmL = left; 
     pwmR = right;
 
@@ -172,13 +176,6 @@ void update_robot_state()
 
 void main_procedure()
 {
-  // update Robot State (if no obstacle to avoid)
-  // if (robot_current_state != avoid_obstacle_right &&
-  //   robot_current_state != avoid_obstacle_left  &&
-  //   robot_current_state != get_puck) {
-  //   update_robot_state();
-  // }
-
   // robot behave with different state
   switch (robot_current_state){
     case(avoid_obstacle_right):
@@ -247,25 +244,13 @@ void main_procedure()
       //searching_goal();
       break;
 
-    // case (approaching_puck):
-    //   if (prev_robot_state != approaching_puck) {
-    //     last_light = read_ambient_light(5);
-    //     good_count = 0;
-    //     bad_count  = 0;
-    //     heading_dir = 1;      
-    //   }
-    //   //move_forward_cl();
-
-    //   //approach_puck_step();
-    //   break;
-
     case(finding_goal):
     case(moving):
       if (prev_robot_state != moving) {
         reset_ticks();          
       }
 
-      move_forward();
+      //move_forward();
       break;
     
     default:
@@ -304,41 +289,7 @@ void loop()
   // rotate_angle(90.0);
   // delay(2000);
 
-  //delay(2000);
-  // BeaconType bt = detect_beacon();
-  // if (bt == target_beacon)
-  //   Serial.println("detected");
-  //delay(1000);
-  
-  // if (!locked) {
-  //   // 還沒鎖定 puck：先找
-  //   if (try_search_puck()) {
-  //     Serial.println("found and locked");
-  //     locked = true;
-  //     reset_ticks();
-  //   } else {
-  //     Serial.println("not found");
-  //     delay(500);   // 避免瘋狂連續掃
-  //   }
-  // } else {
-  //   // 已經鎖定：一直往前走
-  //   move_forward();    // 記得要一直呼叫才是閉迴路
-  //   delay(20);
-  // }
-
-  // delay(2000);
-
-  // int v = read_light_sensor(3);
-  // if (v < detected_puck_val)
-  //   Serial.println("lighter");
-  // Serial.print("light : ");
-  // Serial.println(v);
-  // delay(1000);
   // ============================
-   
-  //search_puck();
-  //searching_goal();
-  //prev_robot_state = robot_current_state;
 
   // obstacle avoidance has highest priority in all states
   noInterrupts();
@@ -369,8 +320,17 @@ void loop()
   }
 
   if (target_touched && !has_puck){
-    robot_current_state = get_puck;
     has_puck = true;
+    MsTimer2::stop();
+    if (try_search_goal()){
+      robot_current_state = moving;
+    }
+    MsTimer2::start();
+  }
+ 
+  // lost the puck
+  if (has_puck && read_light_sensor(5) > 300){
+    has_puck = false;
   }
 
   if (bump_count >= bump_threshold) {
@@ -381,7 +341,7 @@ void loop()
   if (need_full_search) {
     MsTimer2::stop();
     move_backward();
-    delay(1000);
+    delay(800);
     stop_motors();
     MsTimer2::start();
     robot_current_state = searching_puck;
@@ -391,6 +351,8 @@ void loop()
   if (robot_current_state == moving || robot_current_state == idle) {
     update_robot_state();
   }
+
+  prev_robot_state = robot_current_state;
 
   main_procedure(); 
   
